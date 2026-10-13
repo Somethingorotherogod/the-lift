@@ -1,4 +1,9 @@
+<!doctype html>
+<html lang="en">
+<head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="A daily trivia game: the more niche your answer, the higher the lift climbs.">
 <title>The Lift</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;800;900&family=IBM+Plex+Sans:wght@400;500;700&family=Share+Tech+Mono&display=swap">
@@ -24,7 +29,7 @@
   --f-led: "Share Tech Mono", ui-monospace, Menlo, monospace;
   color-scheme: dark;
 }
-html, body { height: 100%; }
+html, body { height: 100%; margin: 0; }
 [hidden] { display: none !important; }
 body { background: var(--void); color: var(--bone); font-family: var(--f-body); font-size: 15px; overflow: hidden; }
 #app { position: relative; height: 100%; width: 100%; }
@@ -128,7 +133,8 @@ details summary { cursor: pointer; font-size: 14px; color: var(--t5); }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
-
+</head>
+<body>
 <div id="app">
   <canvas id="scene"></canvas>
   <div class="hud">
@@ -1021,3 +1027,5 @@ if (!BANK.length) $("bank-note").textContent = "The question bank failed to load
 requestAnimationFrame(loop);
 })();
 </script>
+</body>
+</html>

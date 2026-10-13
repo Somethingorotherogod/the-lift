@@ -12,7 +12,9 @@ up to the Empire State Building, or out into space.
 
 ## Play it
 
-Open `index.html` in a browser (it loads `lift_questions.js` from the same folder).
+**https://somethingorotherogod.github.io/the-lift/**
+
+Or run it yourself: open `index.html` in a browser (it loads `lift_questions.js` from the same folder).
 To serve it locally: `python3 -m http.server` and visit http://localhost:8000.
 
 ## Files
