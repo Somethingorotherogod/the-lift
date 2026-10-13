@@ -1,0 +1,1023 @@
+<meta charset="utf-8">
+<title>The Lift</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;800;900&family=IBM+Plex+Sans:wght@400;500;700&family=Share+Tech+Mono&display=swap">
+<style>
+/* Layout: first-person view from inside a lift car. The canvas draws the car, its doors and the world outside;
+   the HUD sits on top, the floor gauge beside the door, and the question card on the car floor. One committed dark look. */
+:root {
+  --void: #07080a;
+  --steel: #1b1e22;
+  --steel-2: #2a2f35;
+  --steel-hi: #9aa3ab;
+  --bone: #ece7dc;
+  --dim: #959ca2;
+  --amber: #ffb02e;
+  --alarm: #e5483a;
+  --t1: #a3abb2;
+  --t2: #dd8f5c;
+  --t3: #e3c172;
+  --t4: #f4e7c2;
+  --t5: #8fdcff;
+  --f-display: "Big Shoulders Display", "Arial Narrow", Impact, sans-serif;
+  --f-body: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
+  --f-led: "Share Tech Mono", ui-monospace, Menlo, monospace;
+  color-scheme: dark;
+}
+html, body { height: 100%; }
+[hidden] { display: none !important; }
+body { background: var(--void); color: var(--bone); font-family: var(--f-body); font-size: 15px; overflow: hidden; }
+#app { position: relative; height: 100%; width: 100%; }
+canvas#scene { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+
+.hud { position: absolute; top: 0; left: 0; right: 0; display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding: 12px 16px; pointer-events: none; }
+.brand { font-family: var(--f-display); font-weight: 900; font-size: 26px; letter-spacing: .06em; line-height: 1; text-transform: uppercase; }
+.brand small { display: block; font-family: var(--f-led); font-size: 12px; letter-spacing: .12em; color: var(--amber); margin-top: 5px; font-weight: 400; }
+.meters { display: flex; gap: 8px; }
+.meter { background: rgba(7,8,10,.78); border: 1px solid rgba(236,231,220,.14); border-radius: 4px; padding: 5px 10px; text-align: right; min-width: 68px; }
+.meter b { display: block; font-family: var(--f-led); font-size: 19px; font-weight: 400; color: var(--amber); font-variant-numeric: tabular-nums; }
+.meter span { font-size: 10px; letter-spacing: .14em; color: var(--dim); text-transform: uppercase; }
+
+/* floor gauge beside the door */
+.gauge { position: absolute; display: flex; flex-direction: column; justify-content: space-between; pointer-events: none; }
+.gauge .row { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--dim); transition: color .2s, transform .2s; min-width: 0; }
+.gauge .row i { flex: none; width: 10px; height: 10px; border-radius: 50%; border: 2px solid currentColor; }
+.gauge .row .txt { min-width: 0; }
+.gauge .row b { display: block; font-family: var(--f-display); font-weight: 800; font-size: 17px; letter-spacing: .03em; line-height: 1.05; text-transform: uppercase; color: var(--bone); opacity: .55; }
+.gauge .row small { font-family: var(--f-led); font-size: 12px; }
+.gauge .row.lit { color: var(--c); }
+.gauge .row.lit b { opacity: 1; color: var(--c); }
+.gauge .row.lit i { background: var(--c); box-shadow: 0 0 10px var(--c); }
+.gauge .row.hit { transform: translateX(4px); }
+.gauge .row.base b { font-size: 14px; }
+.gauge.narrow .row b { display: none; }
+.gauge.narrow .row small { font-size: 11px; }
+
+/* question card on the car floor */
+.dock { position: absolute; left: 0; right: 0; bottom: 0; display: flex; justify-content: center; padding: 0 16px calc(14px + env(safe-area-inset-bottom, 0px)); pointer-events: none; }
+.card { pointer-events: auto; width: 100%; max-width: 580px; background: rgba(12,13,15,.94); border: 1px solid rgba(236,231,220,.16); border-top: 3px solid var(--amber); border-radius: 4px; padding: 14px 16px 16px; box-shadow: 0 18px 40px rgba(0,0,0,.6); }
+.eyebrow { font-family: var(--f-led); font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: var(--dim); display: flex; justify-content: space-between; gap: 8px; }
+.prompt { font-family: var(--f-display); font-weight: 800; font-size: clamp(24px, 5vw, 32px); line-height: 1.05; margin: 6px 0 10px; text-wrap: balance; letter-spacing: .01em; }
+.timer { height: 3px; background: rgba(236,231,220,.12); overflow: hidden; margin-bottom: 10px; }
+.timer i { display: block; height: 100%; background: var(--amber); transform-origin: left; }
+form.row { display: flex; gap: 8px; }
+input#answer { flex: 1; min-width: 0; font: 500 17px var(--f-body); color: var(--bone); background: #0d0f11; border: 1px solid rgba(236,231,220,.25); border-radius: 3px; padding: 11px 12px; outline: none; }
+input#answer:focus { border-color: var(--amber); box-shadow: 0 0 0 3px rgba(255,176,46,.22); }
+.btn { font: 700 14px var(--f-body); letter-spacing: .1em; text-transform: uppercase; border: 0; border-radius: 3px; padding: 11px 16px; cursor: pointer; background: var(--amber); color: #1a1205; }
+.btn:hover { filter: brightness(1.08); }
+.btn:focus-visible, .ghost:focus-visible, summary:focus-visible, a:focus-visible, .mode:focus-visible { outline: 2px solid var(--t5); outline-offset: 2px; }
+.ghost { font: 500 14px var(--f-body); background: transparent; color: var(--bone); border: 1px solid rgba(236,231,220,.3); border-radius: 3px; padding: 10px 14px; cursor: pointer; }
+.ghost:hover { border-color: var(--bone); }
+.status { min-height: 20px; margin-top: 9px; font-size: 14px; color: var(--dim); }
+.status.ask { color: var(--bone); }
+.status.ask b { color: var(--amber); }
+.status.bad { color: var(--alarm); }
+.verdict { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.tag { font-family: var(--f-led); font-size: 12px; letter-spacing: .1em; text-transform: uppercase; padding: 3px 8px; border: 1px solid currentColor; border-radius: 2px; }
+.verdict .what { font-size: 15px; min-width: 0; }
+.verdict .what b { font-weight: 700; }
+.big { font-family: var(--f-display); font-weight: 800; font-size: 26px; letter-spacing: .02em; text-transform: uppercase; margin-top: 6px; line-height: 1.05; }
+.card .actions { margin-top: 12px; display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* sheets */
+.sheet { position: absolute; inset: 0; overflow-y: auto; padding: 80px 16px 40px; background: linear-gradient(to bottom, rgba(7,8,10,.35), rgba(7,8,10,.9) 45%); }
+.sheet-in { max-width: 660px; margin: 0 auto; display: grid; gap: 18px; }
+.title-hero h1 { font-family: var(--f-display); font-weight: 900; font-size: clamp(64px, 17vw, 128px); line-height: .82; margin: 0; letter-spacing: .02em; text-transform: uppercase; }
+.title-hero h1 span { color: var(--amber); }
+.title-hero p { font-size: 16px; line-height: 1.55; color: var(--dim); max-width: 50ch; margin: 14px 0 0; }
+.modes { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; }
+.mode { text-align: left; background: rgba(27,30,34,.95); border: 1px solid rgba(236,231,220,.16); border-radius: 4px; padding: 16px; color: var(--bone); cursor: pointer; display: grid; gap: 6px; font-family: var(--f-body); }
+.mode:hover { border-color: var(--amber); }
+.mode .k { font-family: var(--f-led); font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: var(--amber); }
+.mode .n { font-family: var(--f-display); font-weight: 800; font-size: 26px; text-transform: uppercase; letter-spacing: .02em; }
+.mode .d { font-size: 13.5px; color: var(--dim); line-height: 1.45; }
+.ladder { display: grid; gap: 6px; }
+.ladder div { display: grid; grid-template-columns: 22px 1fr auto; gap: 10px; align-items: baseline; border-top: 1px solid rgba(236,231,220,.12); padding-top: 6px; font-size: 14px; }
+.ladder div b { font-family: var(--f-led); color: var(--c); font-weight: 400; }
+.ladder div span:last-child { font-family: var(--f-led); color: var(--dim); font-size: 13px; }
+.rules { font-size: 14px; color: var(--dim); line-height: 1.55; }
+.rules b { color: var(--bone); }
+.final { background: rgba(27,30,34,.96); border: 1px solid rgba(236,231,220,.16); border-top: 3px solid var(--amber); border-radius: 4px; padding: 18px; display: grid; gap: 12px; }
+.final h2 { font-family: var(--f-display); font-weight: 900; font-size: 36px; margin: 0; line-height: 1; text-transform: uppercase; letter-spacing: .02em; }
+.stats { display: flex; gap: 24px; flex-wrap: wrap; }
+.stats div b { display: block; font-family: var(--f-led); font-weight: 400; font-size: 28px; color: var(--amber); font-variant-numeric: tabular-nums; }
+.stats div span { font-size: 11px; letter-spacing: .14em; color: var(--dim); text-transform: uppercase; }
+.share-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+pre.share { margin: 0; font-family: var(--f-led); font-size: 14px; line-height: 1.5; background: var(--void); border: 1px dashed rgba(236,231,220,.25); border-radius: 3px; padding: 10px 12px; white-space: pre-wrap; user-select: all; }
+.toast { font-size: 13px; color: var(--t5); }
+.qres { background: rgba(27,30,34,.96); border: 1px solid rgba(236,231,220,.12); border-radius: 4px; padding: 14px 16px; display: grid; gap: 8px; }
+.qres h3 { margin: 0; font-family: var(--f-display); font-weight: 800; font-size: 22px; text-transform: uppercase; letter-spacing: .02em; }
+.qres .mine { font-size: 14.5px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.qres .mine .pts { margin-left: auto; font-family: var(--f-led); color: var(--amber); }
+details summary { cursor: pointer; font-size: 14px; color: var(--t5); }
+.all { display: grid; gap: 12px; margin-top: 10px; }
+.all h4 { margin: 0 0 4px; font-family: var(--f-display); font-weight: 800; font-size: 16px; letter-spacing: .04em; text-transform: uppercase; color: var(--c); }
+.chips { display: flex; flex-wrap: wrap; gap: 4px 6px; }
+.chips a { font-size: 13px; color: var(--bone); text-decoration: none; padding: 2px 7px; border-radius: 2px; background: rgba(236,231,220,.06); }
+.chips a:hover { background: rgba(236,231,220,.14); }
+.chips a.you { background: var(--amber); color: #1a1205; font-weight: 700; }
+.countdown { font-family: var(--f-led); color: var(--dim); font-size: 13px; }
+.note { font-size: 12.5px; color: var(--dim); line-height: 1.5; }
+@media (max-width: 520px) {
+  .brand { font-size: 21px; }
+  .meter { min-width: 0; padding: 4px 8px; }
+  .meter b { font-size: 16px; }
+  .meter.car { display: none; }
+  .card { padding: 12px 12px 14px; }
+  .big { font-size: 22px; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div id="app">
+  <canvas id="scene"></canvas>
+  <div class="hud">
+    <div class="brand">The Lift<small id="mode-label">Today's Lift</small></div>
+    <div class="meters">
+      <div class="meter car"><b id="m-car">0/5</b><span>Rides</span></div>
+      <div class="meter"><b id="m-score">0</b><span>Score</span></div>
+    </div>
+  </div>
+  <div class="gauge" id="gauge" hidden></div>
+  <div class="dock" id="dock" hidden><div class="card" id="card"></div></div>
+
+  <div class="sheet" id="title-sheet">
+    <div class="sheet-in">
+      <div class="title-hero">
+        <h1>The<br><span>Lift</span></h1>
+        <p>Five prompts. Name anything that fits. The more niche your answer, the higher the lift climbs: past three New York towers, up to the Empire State Building, or straight out into space.</p>
+      </div>
+      <div class="modes">
+        <button class="mode" id="btn-daily" type="button">
+          <span class="k" id="daily-k">Today's Lift</span>
+          <span class="n" id="daily-n">Ride today's lift</span>
+          <span class="d" id="daily-d">Same five prompts and buildings for everyone. A new lift every 24 hours.</span>
+        </button>
+        <button class="mode" id="btn-free" type="button">
+          <span class="k">Free ride · unlimited</span>
+          <span class="n">Random ride</span>
+          <span class="d">Five random prompts and a fresh set of towers. Ride as often as you like.</span>
+        </button>
+      </div>
+      <div class="ladder" id="ladder"></div>
+      <p class="rules"><b>How it works.</b> You get 25 seconds per prompt. A wrong answer flashes FLOOR NOT RECOGNISED and you can keep guessing until the time runs out; if it does, the floor isn't chosen and you move on. Every possible answer has been sorted into five levels of nicheness. Common answers only reach the first tower, and the deepest cuts go interstellar. If you misspell something, the lift asks if you meant the closest answer; press Enter again to lock it in.</p>
+      <p class="note" id="bank-note"></p>
+    </div>
+  </div>
+
+  <div class="sheet" id="result-sheet" hidden><div class="sheet-in" id="result-in"></div></div>
+</div>
+
+<script src="lift_questions.js"></script>
+<script>
+(() => {
+const BANK = window.LIFT_BANK || [];
+const ROUND = 5, SECONDS = 25, EPOCH = Date.UTC(2026, 9, 13);
+
+// ---------- buildings ----------
+// Architectural heights from Wikipedia. Each ride draws one tower from each pool, then the Empire State, then space.
+const POOLS = [
+  [["Flatiron Building", 87, 285, 22], ["UN Secretariat Building", 154, 505, 39], ["Seagram Building", 157, 515, 38], ["Hearst Tower", 182, 597, 46], ["Trump Tower", 202, 664, 58]],
+  [["Woolworth Building", 241, 792, 57], ["MetLife Building", 246, 808, 59], ["56 Leonard Street", 250, 821, 57], ["30 Rockefeller Plaza", 259, 850, 66], ["8 Spruce Street", 265, 870, 76]],
+  [["Citigroup Center", 279, 915, 59], ["40 Wall Street", 283, 927, 70], ["Chrysler Building", 319, 1046, 77], ["Bank of America Tower", 366, 1200, 55]],
+];
+const EMPIRE = ["Empire State Building", 381, 1250, 102];
+const SPACE = ["Interstellar", Infinity, Infinity, Infinity];
+const TIER_COLORS = ["var(--t1)", "var(--t2)", "var(--t3)", "var(--t4)", "var(--t5)"];
+const TIER_HEX = ["#a3abb2", "#dd8f5c", "#e3c172", "#f4e7c2", "#8fdcff"];
+const POINTS = [100, 250, 450, 700, 1000];
+const the = n => /^\d/.test(n) ? n : `the ${n}`;
+const fmtH = b => b[1] === Infinity ? "Beyond the sky" : `${b[1]} m · ${b[2].toLocaleString()} ft`;
+function pickTowers(rng) { return [...POOLS.map(p => p[Math.floor(rng() * p.length)]), EMPIRE, SPACE]; }
+
+// ---------- matching ----------
+const SPECIAL = { "ð": "d", "þ": "th", "æ": "ae", "ø": "o", "œ": "oe", "ß": "ss", "ł": "l", "đ": "d", "ı": "i", "ʻ": "", "′": "" };
+function norm(s) { // must match norm() in build_lift.py
+  s = [...s.toLowerCase()].map(c => SPECIAL[c] ?? c).join("");
+  s = s.normalize("NFKD").replace(/[̀-ͯ]/g, "");
+  s = s.replace(/&/g, " and ").replace(/[^a-z0-9 ]/g, "").replace(/\s+/g, " ").trim().replace(/^the /, "");
+  return s.replace(/ /g, "");
+}
+function lev(a, b, max) {
+  if (Math.abs(a.length - b.length) > max) return max + 1;
+  let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    const cur = [i]; let best = i;
+    for (let j = 1; j <= b.length; j++) {
+      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+      best = Math.min(best, cur[j]);
+    }
+    if (best > max) return max + 1;
+    prev = cur;
+  }
+  return prev[b.length];
+}
+function phon(k) { // a rough "sounds like" key
+  let s = k.replace(/[0-9]/g, "");
+  s = s.replace(/^(kn|gn|pn|wr|ps)/, m => m[1]).replace(/ph/g, "f").replace(/ck/g, "k").replace(/sch/g, "sk").replace(/tch/g, "ch")
+    .replace(/dg(?=[eiy])/g, "j").replace(/gh/g, "").replace(/c(?=[eiy])/g, "s").replace(/c/g, "k").replace(/q/g, "k")
+    .replace(/x/g, "ks").replace(/z/g, "s").replace(/v/g, "f").replace(/wh/g, "w").replace(/y/g, "i");
+  return (s[0] || "") + s.slice(1).replace(/[aeiouhw]/g, "").replace(/(.)\1+/g, "$1");
+}
+function indexQ(q) {
+  if (q.idx) return q.idx;
+  const map = new Map();
+  q.a.forEach((a, i) => { for (const k of [norm(a[0]), ...a[2]]) if (k.length >= 2 && !map.has(k)) map.set(k, i); });
+  return (q.idx = map);
+}
+// exact -> {idx}, close -> {idx, suggest:true}, nothing -> null
+function judge(q, raw) {
+  const k = norm(raw || "");
+  if (k.length < 2) return null;
+  const map = indexQ(q);
+  if (map.has(k)) return { idx: map.get(k) };
+  const max = k.length <= 3 ? 0 : k.length <= 5 ? 1 : k.length <= 9 ? 2 : 3;
+  const pk = k.length >= 4 ? phon(k) : null;
+  let best = null, bestScore = 9;
+  for (const [al, i] of map) {
+    if (al.length < 3) continue;
+    let score = 9;
+    if (max) { const d = lev(k, al, max); if (d <= max) score = d; }
+    if (score > 0.8 && pk && pk.length >= 3 && Math.abs(al.length - k.length) <= 3 && phon(al) === pk) score = 0.8;
+    if (score > 1.6 && k.length >= 5 && al.length > k.length && (al.startsWith(k) || (k.length >= 6 && al.includes(k))) && k.length / al.length >= 0.5) score = 1.6;
+    if (score < bestScore || (score === bestScore && best !== null && i < best)) { bestScore = score; best = i; }
+  }
+  return best === null ? null : { idx: best, suggest: true };
+}
+
+// ---------- seeded random + dates ----------
+function mulberry(seed) { return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function shuffleIds(rng) { const ids = BANK.map((_, i) => i); for (let i = ids.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [ids[i], ids[j]] = [ids[j], ids[i]]; } return ids; }
+function todayKey() { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; }
+function liftNumber() { const d = new Date(); return Math.floor((Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) - EPOCH) / 864e5) + 1; }
+function store(k, v) { try { if (v === undefined) return JSON.parse(localStorage.getItem(k)); localStorage.setItem(k, JSON.stringify(v)); } catch (e) { return null; } }
+
+// ---------- DOM helpers ----------
+const $ = id => document.getElementById(id);
+const el = (tag, attrs = {}, ...kids) => { const e = document.createElement(tag); for (const [k, v] of Object.entries(attrs)) { if (k === "class") e.className = v; else if (k === "style") e.style.cssText = v; else if (k.startsWith("on")) e.addEventListener(k.slice(2), v); else e.setAttribute(k, v); } for (const c of kids) e.append(c); return e; };
+const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+$("ladder").append(...["Common", "Familiar", "Niche", "Deep cut", "Interstellar"].map((n, i) =>
+  el("div", { style: `--c:${TIER_COLORS[i]}` }, el("b", {}, String(i + 1)), el("span", {}, `${n}: ${["a random low-rise tower", "a random mid-town tower", "a random skyscraper", "the Empire State Building", "out of the atmosphere"][i]}`), el("span", {}, `+${POINTS[i]}`))));
+$("bank-note").textContent = `${BANK.length} everyday prompts, from fast food to football clubs. Every possible answer was sorted into one of the five levels by an AI review, and each one links to Wikipedia in your results.`;
+
+// ---------- game ----------
+let G = null, phase = "title", timerRAF = 0, pending = null;
+
+function startGame(mode) {
+  const rng = mode === "daily" ? mulberry(liftNumber() * 7919 + 17) : Math.random;
+  const qids = shuffleIds(rng).slice(0, ROUND);
+  const towers = qids.map(() => pickTowers(rng));
+  G = { mode, num: liftNumber(), qids, towers, i: 0, answers: [], score: 0 };
+  $("mode-label").textContent = mode === "daily" ? `Today's Lift #${G.num}` : "Free ride";
+  $("title-sheet").hidden = true; $("result-sheet").hidden = true;
+  updateHud();
+  openForQuestion();
+}
+function updateHud() {
+  $("m-car").textContent = `${G ? G.answers.length : 0}/${ROUND}`;
+  $("m-score").textContent = (G ? G.score : 0).toLocaleString();
+}
+function buildGauge() {
+  const g = $("gauge"); g.innerHTML = "";
+  const t = G.towers[G.i];
+  for (let k = 4; k >= 0; k--) g.append(el("div", { class: "row", "data-k": k, style: `--c:${TIER_COLORS[k]}` }, el("i"), el("span", { class: "txt" }, el("b", {}, t[k][0]), el("small", {}, k === 4 ? "∞" : `${t[k][1]} m`))));
+  g.append(el("div", { class: "row base lit", "data-k": -1, style: "--c:var(--amber)" }, el("i"), el("span", { class: "txt" }, el("b", {}, "Basement"), el("small", {}, "B"))));
+  g.hidden = false;
+  layoutOverlay();
+}
+function lightGauge(alt, hitK) {
+  const t = G && G.towers[G.i]; if (!t) return;
+  for (const row of $("gauge").children) {
+    const k = +row.dataset.k;
+    row.classList.toggle("lit", k === -1 ? alt < 1 : alt >= (k === 4 ? 1e5 : t[k][1]) - 2);
+    row.classList.toggle("hit", k === hitK);
+  }
+}
+
+function openForQuestion() {
+  phase = "opening"; pending = null;
+  buildGauge();
+  scene.reset();
+  scene.doorTarget = 1;
+  renderQuestionCard();
+  setTimeout(() => { if (phase === "opening") { phase = "question"; startTimer(); $("answer")?.focus(); } }, reduceMotion ? 50 : 700);
+}
+function renderQuestionCard() {
+  const q = BANK[G.qids[G.i]];
+  const card = $("card"); card.innerHTML = "";
+  const input = el("input", { id: "answer", autocomplete: "off", autocapitalize: "off", spellcheck: "false", placeholder: "Type an answer…", "aria-label": "Your answer", enterkeyhint: "go" });
+  card.append(
+    el("div", { class: "eyebrow" }, el("span", {}, `Ride ${G.i + 1} of ${ROUND}`), el("span", { id: "secs" }, `${SECONDS}s`)),
+    el("div", { class: "prompt" }, q.q),
+    el("div", { class: "timer" }, el("i", { id: "tbar" })),
+    el("form", { class: "row", onsubmit: e => { e.preventDefault(); submit(input.value); } }, input, el("button", { class: "btn", type: "submit" }, "Go")),
+    el("div", { class: "status", id: "status", role: "status" }, "The deeper the cut, the higher you ride.")
+  );
+  input.addEventListener("input", () => { if (pending && input.value !== pending.raw) { pending = null; setStatus("The deeper the cut, the higher you ride."); } });
+  $("dock").hidden = false;
+}
+function setStatus(html, cls = "") { const s = $("status"); if (s) { s.className = "status " + cls; s.innerHTML = html; } }
+const esc = s => s.replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+let timerEnd = 0;
+function startTimer() {
+  timerEnd = performance.now() + SECONDS * 1000;
+  const tick = () => {
+    if (phase !== "question") return;
+    const left = Math.max(0, timerEnd - performance.now());
+    const b = $("tbar"); if (b) b.style.transform = `scaleX(${left / (SECONDS * 1000)})`;
+    const s = $("secs"); if (s) s.textContent = `${Math.ceil(left / 1000)}s`;
+    if (left <= 0) return lockIn(null, $("answer")?.value || "", true);
+    timerRAF = requestAnimationFrame(tick);
+  };
+  tick();
+}
+
+function submit(raw) {
+  if (phase !== "question") return;
+  const q = BANK[G.qids[G.i]];
+  if (pending && raw === pending.raw) return lockIn(pending.idx, raw);
+  if (!raw.trim()) { setStatus("Type an answer first.", "bad"); return; }
+  const r = judge(q, raw);
+  if (r && !r.suggest) return lockIn(r.idx, raw);
+  if (r && r.suggest) {
+    pending = { idx: r.idx, raw };
+    setStatus(`Did you mean <b>${esc(q.a[r.idx][0])}</b>? Press Enter again to lock it in, or change your answer.`, "ask");
+    return;
+  }
+  wrongFloor(raw);
+}
+
+// Not on the list: flash the sign, keep the clock running and let them try again
+function wrongFloor(raw) {
+  scene.showSign("FLOOR NOT RECOGNISED", "#ffb02e", 2.6);
+  scene.flicker = 0.35; scene.shake = 0.18;
+  setStatus(`“${esc(raw.trim())}” isn't on the list. Pick another floor.`, "bad");
+  const inp = $("answer"); if (inp) { inp.value = ""; inp.focus(); }
+}
+
+function lockIn(idx, raw, timedOut) {
+  if (phase !== "question") return;
+  cancelAnimationFrame(timerRAF);
+  pending = null;
+  const q = BANK[G.qids[G.i]];
+  const tier = idx === null ? -1 : q.a[idx][1] - 1;
+  const t = G.towers[G.i];
+  G.answers.push({ text: raw.trim(), idx, tier });
+  const pts = tier >= 0 ? POINTS[tier] : 0;
+  G.score += pts;
+  phase = "ride";
+  const card = $("card"); card.innerHTML = "";
+  if (tier >= 0) {
+    card.append(
+      el("div", { class: "verdict" }, el("span", { class: "tag", style: `color:${TIER_COLORS[tier]}` }, ["Common", "Familiar", "Niche", "Deep cut", "Interstellar"][tier]), el("span", { class: "what" }, el("b", {}, q.a[idx][0]))),
+      el("div", { class: "big", style: `color:${TIER_COLORS[tier]}` }, tier === 4 ? "Going up… and up… and up" : `Going up to ${the(t[tier][0])}`)
+    );
+  } else {
+    card.append(
+      el("div", { class: "verdict" }, el("span", { class: "tag", style: "color:var(--alarm)" }, "Out of time"), el("span", { class: "what" }, "The lift stays in the basement.")),
+      el("div", { class: "big", style: "color:var(--alarm)" }, "Floor not chosen")
+    );
+  }
+  if (tier < 0) scene.showSign("FLOOR NOT CHOSEN", "#ff3b2f", Infinity);
+  scene.ride(tier, t, () => arrived(tier, pts), () => landed(tier));
+}
+function arrived(tier, pts) {
+  updateHud();
+  const t = G.towers[G.i];
+  const card = $("card"); card.innerHTML = "";
+  card.append(
+    el("div", { class: "verdict" }, el("span", { class: "tag", style: `color:${TIER_COLORS[tier]}` }, `+${pts}`), el("span", { class: "what" }, tier === 4 ? "You left the atmosphere." : `Top of ${the(t[tier][0])}, ${fmtH(t[tier])}.`)),
+    el("div", { class: "big", style: `color:${TIER_COLORS[tier]}` }, tier === 4 ? "Interstellar" : t[tier][0])
+  );
+}
+function landed(tier) {
+  updateHud();
+  phase = "closed";
+  const last = G.i === ROUND - 1;
+  if (tier < 0) { // time ran out: skip straight on
+    setTimeout(() => { if (phase !== "closed") return; if (last) finish(); else { G.i++; openForQuestion(); } }, reduceMotion ? 300 : 900);
+    $("card").innerHTML = "";
+    $("card").append(el("div", { class: "eyebrow" }, el("span", {}, `Ride ${G.i + 1} of ${ROUND}`), el("span", {}, `${G.score.toLocaleString()} pts`)), el("div", { class: "big", style: "color:var(--alarm)" }, last ? "Floor not chosen. Heading to your results…" : "Floor not chosen. Next question…"));
+    return;
+  }
+  const card = $("card"); card.innerHTML = "";
+  const btn = el("button", { class: "btn", type: "button", onclick: () => { if (phase !== "closed") return; if (last) finish(); else { G.i++; openForQuestion(); } } }, last ? "See your results" : "Show next question");
+  card.append(
+    el("div", { class: "eyebrow" }, el("span", {}, `Ride ${G.i + 1} of ${ROUND} done`), el("span", {}, `${G.score.toLocaleString()} pts`)),
+    el("div", { class: "big" }, tier >= 0 ? "Back in the basement" : "Still in the basement"),
+    el("div", { class: "actions" }, btn)
+  );
+  btn.focus();
+}
+
+// ---------- results ----------
+const BAR = k => "▰".repeat(k + 1) + "▱".repeat(4 - k);
+function shareText(r) {
+  const head = r.mode === "daily" ? `Today's Lift #${r.num} · The Lift` : "The Lift · Free ride";
+  const lines = r.answers.map((a, n) => a.tier >= 0 ? `${BAR(a.tier)} ${a.tier === 4 ? "INTERSTELLAR" : r.towers[n][a.tier][0]}` : "▱▱▱▱▱ Floor not chosen");
+  return `${head}\n${lines.join("\n")}\n${r.score.toLocaleString()} pts`;
+}
+function finish() {
+  const r = { mode: G.mode, num: G.num, qids: G.qids, prompts: G.qids.map(q => BANK[q].q), towers: G.towers.map(t => t.map(b => [b[0], b[1] === Infinity ? null : b[1], b[2] === Infinity ? null : b[2], b[3]])), answers: G.answers, score: G.score };
+  if (G.mode === "daily") store("lift-daily-" + todayKey(), r);
+  if (r.score > (store("lift-best") || 0)) store("lift-best", r.score);
+  showResults(r);
+}
+function showResults(r) {
+  r.towers = r.towers.map(t => t.map(b => [b[0], b[1] ?? Infinity, b[2] ?? Infinity, b[3]]));
+  phase = "results";
+  G = Object.assign(G || {}, r); updateHud();
+  $("title-sheet").hidden = true; $("dock").hidden = true; $("gauge").hidden = true;
+  $("mode-label").textContent = r.mode === "daily" ? `Today's Lift #${r.num}` : "Free ride";
+  scene.reset(); scene.doorTarget = 0;
+  const box = $("result-in"); box.innerHTML = "";
+  const text = shareText(r);
+  const pre = el("pre", { class: "share" }, text);
+  const toast = el("span", { class: "toast", role: "status" });
+  const copy = el("button", { class: "btn", type: "button", onclick: () => {
+    navigator.clipboard.writeText(text).then(() => { toast.textContent = "Copied. Paste it anywhere to share."; })
+      .catch(() => { const s = getSelection(), rg = document.createRange(); rg.selectNodeContents(pre); s.removeAllRanges(); s.addRange(rg); toast.textContent = "Selected. Press Ctrl/Cmd+C to copy."; });
+  } }, r.mode === "daily" ? "Share today's lift" : "Share result");
+  const best = Math.max(...r.answers.map(a => a.tier));
+  const highest = best < 0 ? "the basement" : best === 4 ? "interstellar" : the(r.towers[r.answers.findIndex(a => a.tier === best)][best][0]);
+  box.append(el("div", { class: "final" },
+    el("div", { class: "eyebrow" }, el("span", {}, r.mode === "daily" ? `Today's Lift #${r.num}` : "Free ride"), el("span", {}, `Best ever: ${(store("lift-best") || r.score).toLocaleString()}`)),
+    el("h2", {}, best === 4 ? "You went interstellar" : `Highest stop: ${highest}`),
+    el("div", { class: "stats" },
+      el("div", {}, el("b", {}, r.score.toLocaleString()), el("span", {}, "Score")),
+      el("div", {}, el("b", {}, String(r.answers.filter(a => a.tier >= 0).length) + "/5"), el("span", {}, "Lifts that moved")),
+      el("div", {}, el("b", {}, String(r.answers.filter(a => a.tier === 4).length)), el("span", {}, "Trips to space"))),
+    pre,
+    el("div", { class: "share-row" }, copy,
+      el("button", { class: "ghost", type: "button", onclick: () => startGame("free") }, "Free ride"),
+      el("button", { class: "ghost", type: "button", onclick: showTitle }, "Lobby"), toast),
+    r.mode === "daily" ? el("div", { class: "countdown", id: "countdown" }) : el("span")));
+  r.qids.forEach((qi, n) => {
+    const q = BANK[qi], a = r.answers[n], t = r.towers[n];
+    const groups = [4, 3, 2, 1, 0].map(k => ({ k, items: q.a.map((x, i) => [x, i]).filter(([x]) => x[1] - 1 === k) }));
+    const all = el("div", { class: "all" }, ...groups.filter(g => g.items.length).map(g =>
+      el("div", { style: `--c:${TIER_COLORS[g.k]}` }, el("h4", {}, g.k === 4 ? "Interstellar" : `${t[g.k][0]} · ${t[g.k][1]} m`),
+        el("div", { class: "chips" }, ...g.items.map(([x, i]) => el("a", { href: x[3] ? `https://en.wikipedia.org/wiki/${encodeURIComponent(x[3])}` : `https://en.wikipedia.org/wiki/Special:Search?search=${encodeURIComponent(x[0])}`, target: "_blank", rel: "noopener", class: i === a.idx ? "you" : "" }, x[0]))))));
+    box.append(el("div", { class: "qres" },
+      el("div", { class: "eyebrow" }, el("span", {}, `Ride ${n + 1}`), el("span", {}, a.tier >= 0 ? `+${POINTS[a.tier]}` : "+0")),
+      el("h3", {}, q.q),
+      el("div", { class: "mine" },
+        el("span", { class: "tag", style: `color:${a.tier >= 0 ? TIER_COLORS[a.tier] : "var(--alarm)"}` }, a.tier < 0 ? "Floor not chosen" : a.tier === 4 ? "Interstellar" : t[a.tier][0]),
+        el("span", {}, a.idx !== null && a.idx >= 0 ? q.a[a.idx][0] : "Out of time")),
+      el("details", {}, el("summary", {}, "See every answer you could have given"), all)));
+  });
+  $("result-sheet").hidden = false; $("result-sheet").scrollTop = 0;
+  tickCountdown();
+}
+function tickCountdown() {
+  const c = $("countdown"); if (!c) return;
+  const now = new Date(), next = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+  const s = Math.floor((next - now) / 1000);
+  c.textContent = `Next lift in ${String(Math.floor(s / 3600)).padStart(2, "0")}:${String(Math.floor(s / 60) % 60).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+}
+setInterval(tickCountdown, 1000);
+
+// A saved daily result only counts if it was made with the current question bank
+function loadDaily() {
+  const r = store("lift-daily-" + todayKey());
+  const ok = r && Array.isArray(r.qids) && Array.isArray(r.prompts) && Array.isArray(r.answers) && Array.isArray(r.towers)
+    && r.qids.every((qi, n) => BANK[qi] && BANK[qi].q === r.prompts[n])
+    && r.answers.every((a, n) => a.idx === null || a.idx === undefined || (BANK[r.qids[n]].a[a.idx]));
+  return ok ? r : null;
+}
+
+function showTitle() {
+  phase = "title"; G = null; updateHud();
+  $("result-sheet").hidden = true; $("dock").hidden = true; $("gauge").hidden = true; $("title-sheet").hidden = false;
+  $("mode-label").textContent = `Today's Lift #${liftNumber()}`;
+  const done = loadDaily();
+  $("daily-k").textContent = `Today's Lift #${liftNumber()}`;
+  $("daily-n").textContent = done ? "See today's result" : "Ride today's lift";
+  $("daily-d").textContent = done ? `You scored ${done.score.toLocaleString()}.` : "Same five prompts and buildings for everyone. A new lift every 24 hours.";
+  scene.reset(); scene.doorTarget = 0.06;
+}
+$("btn-daily").addEventListener("click", () => { const done = loadDaily(); done ? showResults(done) : startGame("daily"); });
+$("btn-free").addEventListener("click", () => startGame("free"));
+
+// ---------- scene ----------
+const canvas = $("scene"), ctx = canvas.getContext("2d");
+const ease = { inOut: p => p < .5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2, in: p => p * p * p, out: p => 1 - Math.pow(1 - p, 3) };
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const mix = (a, b, t) => { const p = c => [1, 3, 5].map(i => parseInt(c.slice(i, i + 2), 16)); const A = p(a), B = p(b); return `rgb(${A.map((v, i) => Math.round(v + (B[i] - v) * t)).join(",")})`; };
+
+const scene = {
+  w: 0, h: 0, t: 0, alt: 0, door: 0, doorTarget: 0, shake: 0, flicker: 0, dust: [],
+  ride_: null, tower: null, label: null, skyline: [], stars: [],
+  resize() {
+    const dpr = Math.min(2, devicePixelRatio || 1);
+    this.w = canvas.clientWidth; this.h = canvas.clientHeight;
+    canvas.width = this.w * dpr; canvas.height = this.h * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const cardSpace = Math.min(250, Math.max(200, this.h * 0.3));
+    const top = 96, bottom = this.h - cardSpace;
+    const avail = Math.max(160, bottom - top);
+    const dw = clamp(this.w * 0.6, 200, Math.min(560, avail * 1.05));
+    const dh = Math.min(avail, dw * 1.75);
+    this.D = { x: (this.w - dw) / 2, y: top + (avail - dh) * 0.5, w: dw, h: dh };
+    layoutOverlay();
+  },
+  reset() { this.alt = 0; this.ride_ = null; this.tower = null; this.label = null; this.flicker = 1.2; this.dust = []; this.sign = null; },
+  showSign(text, color, dur) { this.sign = { text, color, t0: this.t, dur }; },
+  // tier -1 = stays put. onTop fires at the top, onDone after the fall and the doors closing.
+  ride(tier, towers, onTop, onDone) {
+    const t0 = this.t;
+    if (tier < 0) { this.flicker = 2; this.ride_ = { tier, t0, steps: [] }; setTimeout(() => { this.doorTarget = 0; setTimeout(onDone, 900); }, reduceMotion ? 300 : 1400); return; }
+    const top = tier === 4 ? EMPIRE : towers[tier];
+    this.tower = top;
+    const up = reduceMotion ? 0.4 : 1.6 + 2.4 * (top[1] / 381) + (tier === 4 ? 2.6 : 0);
+    const hold = reduceMotion ? 1.6 : (tier === 4 ? 2.0 : 3.4), fall = reduceMotion ? 0.3 : (tier === 4 ? 2.2 : 1.4);
+    this.ride_ = { tier, t0, top: top[1], up, hold, fall, onTop, onDone, topped: false, landed: false };
+  },
+  altAt(r, e) { // altitude in metres at elapsed time e
+    const peak = r.tier === 4 ? 4e8 : r.top - 1.1; // stop just under the roof line so the parapet shows
+    if (e < r.up) {
+      const p = e / r.up;
+      if (r.tier !== 4) return peak * ease.inOut(p);
+      const split = 0.45; // climb the Empire State, then accelerate away
+      if (p < split) return (r.top + 5) * ease.in(p / split);
+      return (r.top + 5) * Math.pow(peak / (r.top + 5), ease.inOut((p - split) / (1 - split)));
+    }
+    if (e < r.up + r.hold) return peak;
+    const p = clamp((e - r.up - r.hold) / r.fall, 0, 1);
+    if (r.tier !== 4) return peak * (1 - ease.in(p));
+    return p < 0.6 ? (r.top + 5) * Math.pow(peak / (r.top + 5), 1 - ease.in(p / 0.6)) : (r.top + 5) * (1 - ease.in((p - 0.6) / 0.4));
+  },
+  step(dt, now) {
+    this.t = now / 1000; // wall clock, so rides keep time even when frames drop
+    this.door += (this.doorTarget - this.door) * Math.min(1, dt * (reduceMotion ? 30 : 7));
+    this.shake = Math.max(0, this.shake - dt * 2.4);
+    this.flicker = Math.max(0, this.flicker - dt);
+    const r = this.ride_;
+    if (r && r.tier >= 0) {
+      const e = this.t - r.t0;
+      this.alt = this.altAt(r, e);
+      if (!r.topped && e >= r.up) { r.topped = true; this.shake = 0.25; r.onTop(); }
+      if (!r.landed && e >= r.up + r.hold + r.fall) {
+        r.landed = true; this.alt = 0; this.shake = 1; this.flicker = 1.4;
+        for (let i = 0; i < 40; i++) this.dust.push({ x: Math.random(), y: 1, vx: (Math.random() - .5) * 0.3, vy: -Math.random() * 0.35, life: 1 });
+        setTimeout(() => { this.doorTarget = 0; setTimeout(r.onDone, reduceMotion ? 200 : 950); }, reduceMotion ? 200 : 650);
+      }
+      lightGauge(this.alt, r.topped && !r.landed ? r.tier : null);
+    }
+    for (const d of this.dust) { d.x += d.vx * dt; d.y += d.vy * dt; d.vy += 0.25 * dt; d.life -= dt * 0.7; }
+    this.dust = this.dust.filter(d => d.life > 0);
+  },
+  draw() {
+    const { w, h, D } = this; if (!w) return;
+    ctx.save();
+    if (this.shake > 0) ctx.translate((Math.random() - .5) * 14 * this.shake, (Math.random() - .5) * 14 * this.shake);
+    // outside world, clipped to the door opening
+    ctx.save(); ctx.beginPath(); ctx.rect(D.x, D.y, D.w, D.h); ctx.clip();
+    drawOutside(this, D);
+    drawDoors(this, D);
+    ctx.restore();
+    drawCar(this, D);
+    ctx.restore();
+  },
+};
+
+// The world outside the door. alt is metres above the basement floor.
+function drawOutside(s, D) {
+  const alt = s.alt, r = s.ride_;
+  const roofH = s.tower ? s.tower[1] : Infinity;
+  const ppm = D.h / 6.5;                 // pixels per metre inside the shaft
+  const carFloor = D.y + D.h;            // landing sills line up with the car floor
+  const roofY = carFloor - (roofH - alt) * ppm; // building roof on screen
+  // sky and skyline above the roof
+  if (roofY > D.y) drawSky(s, D, alt, Math.min(roofY, D.y + D.h));
+  // shaft below the roof
+  const shaftBottom = D.y + D.h, shaftTop = Math.max(D.y, Math.min(roofY, D.y + D.h));
+  if (shaftTop < shaftBottom) {
+    ctx.save(); ctx.beginPath(); ctx.rect(D.x, shaftTop, D.w, shaftBottom - shaftTop); ctx.clip();
+    if (alt > roofH - 1.6 && s.tower && !(s.ride_ && s.ride_.tier === 4)) drawRoof(s, D, roofY);
+    else drawShaft(s, D, alt, ppm, carFloor);
+    ctx.restore();
+  }
+  // on arrival, cut to the outside of the tower you reached
+  if (r && r.tier >= 0 && r.tier < 4 && s.tower) {
+    const e = s.t - r.t0, from = r.up + 0.35, to = r.up + r.hold;
+    const ext = clamp((e - from) / 0.45, 0, 1) * clamp((to - e) / 0.35, 0, 1);
+    if (ext > 0) { ctx.save(); ctx.globalAlpha = ext; drawExterior(s, D, e - from); ctx.restore(); }
+  }
+}
+
+// ---------- tower portraits ----------
+// seg: stacked blocks from the ground up as [width, height] fractions; crown: the top; ch: crown height share
+const TOWER_ART = {
+  "Flatiron Building": { a: 0.42, c: "#b7a68a", seg: [[1, 0.95]], crown: "cornice" },
+  "UN Secretariat Building": { a: 0.3, c: "#4d7b86", seg: [[1, 1]], crown: "flat", glass: 1 },
+  "Seagram Building": { a: 0.36, c: "#4b3b2c", seg: [[1.25, 0.03], [1, 0.97]], crown: "flat", glass: 1 },
+  "Hearst Tower": { a: 0.34, c: "#5f7c8c", seg: [[1.15, 0.2], [1, 0.8]], crown: "flat", glass: 1, diagrid: 1 },
+  "Trump Tower": { a: 0.3, c: "#1d2225", seg: [[1, 0.72], [0.86, 0.1], [0.72, 0.1], [0.58, 0.08]], crown: "flat", glass: 1 },
+  "Woolworth Building": { a: 0.27, c: "#d6ccb5", seg: [[1.2, 0.1], [1, 0.5], [0.62, 0.2]], crown: "pyramid", ch: 0.2 },
+  "MetLife Building": { a: 0.44, c: "#8f8a80", seg: [[1.25, 0.1], [1, 0.9]], crown: "flat", sign: "MetLife" },
+  "56 Leonard Street": { a: 0.26, c: "#6f8592", seg: "jenga", glass: 1 },
+  "30 Rockefeller Plaza": { a: 0.3, c: "#c5bba6", seg: [[1, 0.55], [0.86, 0.18], [0.72, 0.15], [0.56, 0.12]], crown: "flat" },
+  "8 Spruce Street": { a: 0.22, c: "#a9b0b6", seg: [[1.35, 0.08], [1, 0.92]], crown: "flat", wavy: 1 },
+  "Citigroup Center": { a: 0.3, c: "#b8bcc0", seg: [[1, 0.8]], crown: "slant", ch: 0.2, stilts: 1 },
+  "40 Wall Street": { a: 0.24, c: "#c2b59c", seg: [[1.2, 0.1], [1, 0.5], [0.78, 0.15]], crown: "pyramidSpire", ch: 0.25 },
+  "Chrysler Building": { a: 0.22, c: "#c9c3b6", seg: [[1.55, 0.22], [1.15, 0.13], [1, 0.35]], crown: "chrysler", ch: 0.3 },
+  "Bank of America Tower": { a: 0.26, c: "#7f98a8", seg: [[1, 0.68]], crown: "crystal", ch: 0.32, glass: 1 },
+  "Empire State Building": { a: 0.27, c: "#cfc6b2", seg: [[1.45, 0.1], [1, 0.58], [0.72, 0.06], [0.52, 0.06]], crown: "esb", ch: 0.2 },
+};
+
+function drawExterior(s, D, age) {
+  const name = s.tower[0], art = TOWER_ART[name] || { a: 0.3, c: "#9aa0a6", seg: [[1, 1]], crown: "flat" };
+  // dusk sky and a low, hazy skyline
+  const g = ctx.createLinearGradient(0, D.y, 0, D.y + D.h);
+  g.addColorStop(0, "#14203a"); g.addColorStop(0.6, "#4a3d5e"); g.addColorStop(1, "#e08a55");
+  ctx.fillStyle = g; ctx.fillRect(D.x, D.y, D.w, D.h);
+  for (const st of s.stars.slice(0, 50)) { ctx.fillStyle = `rgba(255,255,255,${0.25 + 0.2 * Math.sin(s.t * 2 + st.tw)})`; ctx.fillRect(D.x + st.x * D.w, D.y + st.y * D.h * 0.45, 1.2, 1.2); }
+  const ground = D.y + D.h;
+  ctx.fillStyle = "rgba(20,22,34,.9)";
+  const rng = mulberry(name.length * 97);
+  for (let x = D.x - 10; x < D.x + D.w; x += 8 + rng() * 22) { const hh = D.h * (0.06 + rng() * 0.22); ctx.fillRect(x, ground - hh, 10 + rng() * 26, hh); }
+  // searchlight glow behind the tower
+  const cx = D.x + D.w / 2;
+  const glow = ctx.createRadialGradient(cx, D.y + D.h * 0.45, 10, cx, D.y + D.h * 0.45, D.h * 0.7);
+  glow.addColorStop(0, "rgba(255,190,120,.22)"); glow.addColorStop(1, "rgba(255,190,120,0)");
+  ctx.fillStyle = glow; ctx.fillRect(D.x, D.y, D.w, D.h);
+  // the tower itself
+  const H = D.h * 0.8 * (0.42 + 0.58 * Math.min(1, s.tower[1] / 381)), W = Math.min(H * art.a, D.w * 0.62); // drawn to scale against the Empire State
+  const segs = art.seg === "jenga" ? Array.from({ length: 11 }, (_, i) => [1 + ((i * 37) % 5 - 2) * 0.06, 1 / 11, ((i * 53) % 7 - 3) * 0.04]) : art.seg;
+  const total = segs.reduce((a, b) => a + b[1], 0) + (art.ch || 0);
+  let y = ground, topW = W, topY = ground;
+  const body = art.c;
+  for (const [fw, fh, off] of segs) {
+    const w = fw * W, h = fh / total * H, x = cx - w / 2 + (off || 0) * W;
+    const bg = ctx.createLinearGradient(x, 0, x + w, 0);
+    bg.addColorStop(0, mix(body, "#000000", 0.35)); bg.addColorStop(0.55, body); bg.addColorStop(1, mix(body, "#000000", 0.5));
+    ctx.fillStyle = bg; ctx.fillRect(x, y - h, w, h);
+    towerWindows(x, y - h, w, h, art, name);
+    y -= h; topW = w; topY = y;
+  }
+  if (art.stilts) { ctx.fillStyle = "#0e1016"; ctx.fillRect(cx - W * 0.42, ground - H * 0.06, W * 0.84, H * 0.06); ctx.fillStyle = mix(body, "#000000", 0.3); for (const fx of [-0.5, -0.05, 0.4]) ctx.fillRect(cx + fx * W, ground - H * 0.06, W * 0.1, H * 0.06); }
+  // crowns
+  const ch = (art.ch || 0) / total * H, half = topW / 2;
+  ctx.fillStyle = mix(body, "#ffffff", 0.08);
+  if (art.crown === "cornice") { ctx.fillRect(cx - half - 4, topY - 6, topW + 8, 6); }
+  else if (art.crown === "flat") { ctx.fillStyle = mix(body, "#000000", 0.3); ctx.fillRect(cx - half * 0.4, topY - H * 0.025, half * 0.8, H * 0.025); }
+  else if (art.crown === "pyramid" || art.crown === "pyramidSpire") {
+    const ph = art.crown === "pyramid" ? ch : ch * 0.55;
+    ctx.fillStyle = "#4f8a74"; ctx.beginPath(); ctx.moveTo(cx - half, topY); ctx.lineTo(cx, topY - ph); ctx.lineTo(cx + half, topY); ctx.fill();
+    ctx.fillStyle = "#2f5e4c"; ctx.beginPath(); ctx.moveTo(cx, topY - ph); ctx.lineTo(cx + half, topY); ctx.lineTo(cx, topY); ctx.fill();
+    if (art.crown === "pyramid") for (const k of [-1, 1]) { ctx.fillStyle = "#4f8a74"; ctx.beginPath(); ctx.moveTo(cx + k * half - 4, topY); ctx.lineTo(cx + k * half, topY - ph * 0.35); ctx.lineTo(cx + k * half + 4, topY); ctx.fill(); }
+    else { ctx.fillStyle = "#cfd3d6"; ctx.fillRect(cx - 1.5, topY - ch, 3, ch - ph + 2); }
+  } else if (art.crown === "slant") {
+    ctx.fillStyle = body; ctx.beginPath(); ctx.moveTo(cx - half, topY); ctx.lineTo(cx - half, topY - ch); ctx.lineTo(cx + half, topY); ctx.fill();
+    ctx.fillStyle = "rgba(255,255,255,.15)"; ctx.beginPath(); ctx.moveTo(cx - half, topY - ch); ctx.lineTo(cx + half, topY); ctx.lineTo(cx + half - 3, topY); ctx.lineTo(cx - half, topY - ch + 3); ctx.fill();
+  } else if (art.crown === "chrysler") {
+    const steps = 5, sh = ch * 0.55 / steps;
+    for (let i = 0; i < steps; i++) {
+      const w2 = topW * (1 - i * 0.16), yb = topY - i * sh;
+      ctx.fillStyle = mix("#d9dde2", "#8c939b", i / steps);
+      ctx.beginPath(); ctx.moveTo(cx - w2 / 2, yb); ctx.lineTo(cx - w2 / 2, yb - sh * 0.4); ctx.arc(cx, yb - sh * 0.4, w2 / 2, Math.PI, 0); ctx.lineTo(cx + w2 / 2, yb); ctx.fill();
+      ctx.fillStyle = "rgba(20,24,30,.8)";
+      for (let k = -2; k <= 2; k++) { const tx = cx + k * w2 * 0.17; ctx.beginPath(); ctx.moveTo(tx - 2, yb - sh * 0.3); ctx.lineTo(tx, yb - sh * 0.95); ctx.lineTo(tx + 2, yb - sh * 0.3); ctx.fill(); }
+    }
+    ctx.fillStyle = "#e6e9ec"; ctx.beginPath(); ctx.moveTo(cx - 3, topY - ch * 0.55); ctx.lineTo(cx, topY - ch); ctx.lineTo(cx + 3, topY - ch * 0.55); ctx.fill();
+  } else if (art.crown === "crystal") {
+    ctx.fillStyle = mix(body, "#ffffff", 0.1); ctx.beginPath(); ctx.moveTo(cx - half, topY); ctx.lineTo(cx - half * 0.4, topY - ch * 0.7); ctx.lineTo(cx + half * 0.15, topY - ch * 0.62); ctx.lineTo(cx + half, topY); ctx.fill();
+    ctx.fillStyle = "rgba(255,255,255,.14)"; ctx.beginPath(); ctx.moveTo(cx - half * 0.4, topY - ch * 0.7); ctx.lineTo(cx + half * 0.15, topY - ch * 0.62); ctx.lineTo(cx, topY); ctx.fill();
+    ctx.fillStyle = "#dfe3e6"; ctx.fillRect(cx - half * 0.15, topY - ch, 2.5, ch * 0.4);
+  } else if (art.crown === "esb") {
+    ctx.fillStyle = mix(body, "#ffffff", 0.05); ctx.fillRect(cx - half * 0.6, topY - ch * 0.25, half * 1.2, ch * 0.25);
+    ctx.fillStyle = "#dcd5c4"; ctx.fillRect(cx - half * 0.3, topY - ch * 0.42, half * 0.6, ch * 0.17);
+    ctx.fillStyle = "#e9e6de"; ctx.fillRect(cx - 2, topY - ch, 4, ch * 0.58);
+  }
+  if (art.sign) { ctx.fillStyle = "rgba(255,255,255,.85)"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.font = `700 ${Math.round(topW * 0.16)}px ${getComputedStyle(document.body).getPropertyValue("--f-body")}`; ctx.fillText(art.sign, cx, topY + H * 0.05); }
+  // your lift, glowing at the top floor
+  const pulse = 0.6 + 0.4 * Math.sin(s.t * 6);
+  const ly = topY + Math.max(6, H * 0.012), lx = cx + half * 0.55;
+  const lg2 = ctx.createRadialGradient(lx, ly, 1, lx, ly, 26);
+  lg2.addColorStop(0, `rgba(255,176,46,${0.9 * pulse})`); lg2.addColorStop(1, "rgba(255,176,46,0)");
+  ctx.fillStyle = lg2; ctx.fillRect(lx - 30, ly - 30, 60, 60);
+  ctx.fillStyle = "#ffcf7a"; ctx.fillRect(lx - 3, ly - 3, 6, 6);
+  ctx.strokeStyle = "rgba(255,176,46,.7)"; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(lx + 6, ly); ctx.lineTo(lx + 26, ly - 14); ctx.stroke();
+  ctx.fillStyle = "#ffb02e"; ctx.textAlign = "left"; ctx.textBaseline = "middle"; ctx.font = `12px ${getComputedStyle(document.body).getPropertyValue("--f-led")}`;
+  if (lx + 30 + 70 < D.x + D.w) ctx.fillText("YOUR LIFT", lx + 30, ly - 16);
+  // name band
+  const fam = getComputedStyle(document.body).getPropertyValue("--f-display");
+  ctx.fillStyle = "rgba(7,8,10,.72)"; ctx.fillRect(D.x, D.y + D.h - 54, D.w, 54);
+  ctx.textAlign = "center"; ctx.fillStyle = "#efe6cf"; ctx.font = `900 ${Math.round(clamp(D.w * 0.065, 15, 28))}px ${fam}`;
+  ctx.fillText(name.toUpperCase(), cx, D.y + D.h - 34);
+  ctx.fillStyle = "#ffb02e"; ctx.font = `700 ${Math.round(clamp(D.w * 0.04, 11, 16))}px ${fam}`;
+  ctx.fillText(fmtH(s.tower).toUpperCase(), cx, D.y + D.h - 13);
+}
+
+function towerWindows(x, y, w, h, art, name) {
+  ctx.save(); ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip();
+  if (art.glass) {
+    ctx.fillStyle = "rgba(255,255,255,.07)"; for (let xx = x + 3; xx < x + w; xx += 5) ctx.fillRect(xx, y, 1, h);
+    ctx.fillStyle = "rgba(255,255,255,.05)"; for (let yy = y + 2; yy < y + h; yy += 4) ctx.fillRect(x, yy, w, 1);
+  }
+  if (art.diagrid) { ctx.strokeStyle = "rgba(220,230,235,.35)"; ctx.lineWidth = 1.2; const step = w / 3; for (let k = -6; k < 12; k++) { ctx.beginPath(); ctx.moveTo(x + k * step, y + h); ctx.lineTo(x + k * step + h * 0.6, y); ctx.stroke(); ctx.beginPath(); ctx.moveTo(x + k * step, y + h); ctx.lineTo(x + k * step - h * 0.6, y); ctx.stroke(); } }
+  if (art.wavy) { ctx.strokeStyle = "rgba(255,255,255,.22)"; ctx.lineWidth = 1; for (let xx = x + 3; xx < x + w; xx += 5) { ctx.beginPath(); for (let yy = y; yy <= y + h; yy += 6) { const dx = Math.sin(yy * 0.05 + xx * 0.3) * 2.5; yy === y ? ctx.moveTo(xx + dx, yy) : ctx.lineTo(xx + dx, yy); } ctx.stroke(); } }
+  let seed = name.length * 7919 + Math.round(y);
+  for (let yy = y + 3; yy < y + h - 2; yy += 4) for (let xx = x + 2; xx < x + w - 2; xx += 4) { seed = (seed * 1103515245 + 12345) & 0x7fffffff; if (seed % 5 === 0) { ctx.fillStyle = seed % 3 ? "rgba(255,206,130,.75)" : "rgba(255,240,200,.55)"; ctx.fillRect(xx, yy, 1.6, 1.8); } }
+  ctx.restore();
+}
+
+function drawShaft(s, D, alt, ppm, carFloor) {
+  const k = clamp(alt / 60, 0, 1);
+  const g = ctx.createLinearGradient(0, D.y, 0, D.y + D.h);
+  g.addColorStop(0, mix("#15171a", "#2b2e33", k)); g.addColorStop(1, mix("#0d0e10", "#202328", k));
+  ctx.fillStyle = g; ctx.fillRect(D.x, D.y, D.w, D.h);
+  // concrete blotches that scroll with the car
+  ctx.fillStyle = "rgba(255,255,255,0.025)";
+  for (let i = 0; i < 26; i++) {
+    const yy = ((i * 97.3 + alt * ppm) % (D.h + 200)) + D.y - 100;
+    ctx.fillRect(D.x + ((i * 53.7) % D.w), yy, 30 + (i * 17) % 60, 2 + (i % 3));
+  }
+  const tower = s.tower, floors = tower ? tower[3] : 30, fh = tower ? tower[1] / floors : 4;
+  const speed = s.ride_ && s.ride_.tier >= 0 ? Math.abs(s.alt - (s._lastAlt ?? s.alt)) : 0;
+  s._lastAlt = s.alt;
+  // landings
+  const first = Math.max(0, Math.floor((alt - 8) / fh)), last = Math.ceil((alt + 8) / fh);
+  for (let f = first; f <= last; f++) {
+    const sill = carFloor - (f * fh - alt) * ppm;
+    if (sill < D.y - ppm * 3 || sill > D.y + D.h + ppm * 3) continue;
+    if (f === 0) continue;
+    const dw = D.w * 0.74, dx = D.x + (D.w - dw) / 2, dh = 2.25 * ppm;
+    ctx.fillStyle = "#3a3f45"; ctx.fillRect(dx - 8, sill - dh - 8, dw + 16, dh + 8);
+    ctx.fillStyle = "#545b62"; ctx.fillRect(dx, sill - dh, dw / 2 - 1, dh); ctx.fillRect(dx + dw / 2 + 1, sill - dh, dw / 2 - 1, dh);
+    ctx.fillStyle = "rgba(255,255,255,.06)"; ctx.fillRect(dx + dw * 0.08, sill - dh, 3, dh); ctx.fillRect(dx + dw * 0.58, sill - dh, 3, dh);
+    ctx.fillStyle = "#8a8f94"; ctx.fillRect(dx - 10, sill - 4, dw + 20, 6);
+    ctx.fillStyle = "rgba(236,231,220,.5)"; ctx.font = `800 ${Math.round(ppm * 0.9)}px ${getComputedStyle(document.body).getPropertyValue("--f-display")}`;
+    ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
+    ctx.fillText(String(f), D.x + 10, sill - dh - 0.6 * ppm);
+  }
+  // the basement room sits over everything below floor 1
+  const bSill = carFloor + alt * ppm;
+  if (bSill - D.h - 40 < D.y + D.h) drawBasement(s, D, bSill, ppm);
+  // guide rails
+  for (const x of [D.x + 4, D.x + D.w - 12]) {
+    ctx.fillStyle = "#30343a"; ctx.fillRect(x, D.y, 8, D.h);
+    ctx.fillStyle = "#6f767d";
+    for (let yy = (alt * ppm) % (ppm * 1.5); yy < D.h; yy += ppm * 1.5) ctx.fillRect(x + 2, D.y + yy, 4, 4);
+  }
+  // speed streaks
+  if (speed > 0.25 && !reduceMotion) {
+    ctx.strokeStyle = `rgba(236,231,220,${clamp(speed / 6, 0, 0.35)})`; ctx.lineWidth = 1;
+    for (let i = 0; i < 14; i++) { const x = D.x + ((i * 71 + 13) % D.w); const y = D.y + ((i * 131 + s.t * 2000) % D.h); ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y + clamp(speed * 30, 20, 220)); ctx.stroke(); }
+  }
+  // cable shadow
+  ctx.fillStyle = "rgba(0,0,0,.35)"; ctx.fillRect(D.x + D.w * 0.5 - 2, D.y, 4, D.h);
+}
+
+function drawBasement(s, D, sill, ppm) {
+  // open landing into a grim basement room
+  const roomTop = sill - D.h - 30;
+  ctx.fillStyle = "#101113"; ctx.fillRect(D.x, roomTop, D.w, sill - roomTop);
+  // stained concrete wall
+  const wg = ctx.createLinearGradient(0, roomTop, 0, sill);
+  wg.addColorStop(0, "#17191c"); wg.addColorStop(1, "#1f2124");
+  ctx.fillStyle = wg; ctx.fillRect(D.x + 6, roomTop + 6, D.w - 12, sill - roomTop - 6);
+  ctx.fillStyle = "rgba(0,0,0,.35)";
+  for (let i = 0; i < 7; i++) ctx.fillRect(D.x + 20 + i * D.w / 7, roomTop + 10, 3 + (i % 2) * 4, (sill - roomTop) * (0.3 + (i % 3) * 0.15));
+  // pipes along the ceiling
+  ctx.fillStyle = "#2b2f33"; ctx.fillRect(D.x, roomTop + 14, D.w, 10); ctx.fillRect(D.x, roomTop + 30, D.w, 6);
+  ctx.fillStyle = "#3b4045"; for (let x = D.x + 20; x < D.x + D.w; x += 70) ctx.fillRect(x, roomTop + 10, 8, 18);
+  // caged bulb, flickering
+  const on = s.flicker > 0 ? (Math.random() > 0.45 ? 1 : 0.15) : (Math.sin(s.t * 23) > 0.96 ? 0.3 : 1);
+  const bx = D.x + D.w * 0.68, by = roomTop + 52;
+  const glow = ctx.createRadialGradient(bx, by, 2, bx, by, D.w * 0.55);
+  glow.addColorStop(0, `rgba(255,190,110,${0.28 * on})`); glow.addColorStop(1, "rgba(255,190,110,0)");
+  ctx.fillStyle = glow; ctx.fillRect(D.x, roomTop, D.w, sill - roomTop);
+  ctx.fillStyle = on > 0.5 ? "#ffd59a" : "#5a4a35"; ctx.beginPath(); ctx.arc(bx, by, 7, 0, 7); ctx.fill();
+  ctx.strokeStyle = "#3d3f42"; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(bx, roomTop + 30); ctx.lineTo(bx, by - 7); ctx.stroke();
+  for (let a = 0; a < 4; a++) { ctx.beginPath(); ctx.ellipse(bx, by, 10, 11, a * 0.8, 0, 7); ctx.stroke(); }
+  // stencilled label
+  const fam = getComputedStyle(document.body).getPropertyValue("--f-display");
+  ctx.fillStyle = `rgba(236,231,220,${0.18 + 0.32 * on})`; ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
+  ctx.font = `900 ${Math.round(D.w * 0.32)}px ${fam}`; ctx.fillText("B", D.x + D.w * 0.1, roomTop + (sill - roomTop) * 0.72);
+  ctx.font = `800 ${Math.round(D.w * 0.075)}px ${fam}`; ctx.fillText("BASEMENT", D.x + D.w * 0.1, roomTop + (sill - roomTop) * 0.86);
+  // hazard stripe on the sill and a puddle
+  ctx.save(); ctx.beginPath(); ctx.rect(D.x, sill - 10, D.w, 10); ctx.clip();
+  for (let x = D.x - 20; x < D.x + D.w; x += 24) { ctx.fillStyle = "#c9971f"; ctx.beginPath(); ctx.moveTo(x, sill); ctx.lineTo(x + 12, sill - 10); ctx.lineTo(x + 24, sill - 10); ctx.lineTo(x + 12, sill); ctx.fill(); }
+  ctx.restore();
+  ctx.fillStyle = "rgba(120,140,160,.08)"; ctx.beginPath(); ctx.ellipse(D.x + D.w * 0.3, sill - 16, D.w * 0.18, 5, 0, 0, 7); ctx.fill();
+}
+
+function drawRoof(s, D, roofY) {
+  // the parapet at the top of the tower, with its name cut into the stone
+  const band = D.y + D.h - roofY;
+  const pg = ctx.createLinearGradient(0, roofY, 0, roofY + band);
+  pg.addColorStop(0, "#5b5850"); pg.addColorStop(1, "#2c2b28");
+  ctx.fillStyle = pg; ctx.fillRect(D.x, roofY, D.w, band);
+  ctx.fillStyle = "#8d887c"; ctx.fillRect(D.x, roofY, D.w, 4);
+  ctx.fillStyle = "rgba(0,0,0,.25)"; for (let x = D.x; x < D.x + D.w; x += 46) ctx.fillRect(x, roofY + 4, 2, band);
+  if (band > 24) {
+    const fam = getComputedStyle(document.body).getPropertyValue("--f-display");
+    const size = Math.round(clamp(Math.min(band * 0.42, D.w * 0.07), 12, 34));
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.font = `900 ${size}px ${fam}`; ctx.fillStyle = "#efe6cf";
+    ctx.fillText(s.tower[0].toUpperCase(), D.x + D.w / 2, roofY + band * 0.38);
+    ctx.font = `700 ${Math.round(size * 0.6)}px ${fam}`; ctx.fillStyle = "#ffb02e";
+    ctx.fillText(fmtH(s.tower).toUpperCase(), D.x + D.w / 2, roofY + band * 0.76);
+  }
+}
+
+function buildSkyline() {
+  const rng = mulberry(1913), out = [];
+  for (let i = 0; i < 90; i++) {
+    const d = 700 + rng() * 4200;
+    out.push({ x: rng() * 2 - 1, d, h: 30 + Math.pow(rng(), 2.2) * 260, w: 30 + rng() * 60, crown: rng(), lights: Math.floor(rng() * 1e6) });
+  }
+  out.push({ x: -0.62, d: 3800, h: 541, w: 70, crown: 2, lights: 7 });   // One World Trade Center
+  out.push({ x: 0.36, d: 2600, h: 381, w: 62, crown: 3, lights: 11 });   // Empire State Building
+  out.push({ x: 0.55, d: 3000, h: 472, w: 26, crown: 4, lights: 5 });    // Central Park Tower
+  return out.sort((a, b) => b.d - a.d);
+}
+function buildStars() { const rng = mulberry(77); return Array.from({ length: 220 }, () => ({ x: rng(), y: rng(), r: rng() * 1.4 + 0.3, tw: rng() * 6 })); }
+
+function drawSky(s, D, alt, bottomY) {
+  const space = alt > 500 ? clamp(Math.log10(alt / 500) / Math.log10(2e6 / 500), 0, 1) : 0; // 0 city dusk -> 1 deep space
+  const g = ctx.createLinearGradient(0, D.y, 0, D.y + D.h);
+  g.addColorStop(0, mix("#1d2c48", "#000000", space));
+  g.addColorStop(0.55, mix("#5b4a6a", "#02030a", space));
+  g.addColorStop(1, mix("#f0955a", "#0a1636", space));
+  ctx.fillStyle = g; ctx.fillRect(D.x, D.y, D.w, bottomY - D.y);
+  // stars
+  const starA = clamp((space - 0.25) / 0.5, 0, 1);
+  if (starA > 0) {
+    const warp = s.ride_ && s.ride_.tier === 4 ? clamp((alt - 1e6) / 2e8, 0, 1) : 0;
+    for (const st of s.stars) {
+      const x = D.x + st.x * D.w, y = D.y + st.y * D.h;
+      ctx.fillStyle = `rgba(255,255,255,${starA * (0.6 + 0.4 * Math.sin(s.t * 2 + st.tw))})`;
+      if (warp > 0.02 && !reduceMotion) {
+        const cx = D.x + D.w / 2, cy = D.y + D.h / 2, dx = x - cx, dy = y - cy, L = 1 + warp * 0.8;
+        ctx.strokeStyle = ctx.fillStyle; ctx.lineWidth = st.r; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(cx + dx * L, cy + dy * L); ctx.stroke();
+      } else ctx.fillRect(x, y, st.r, st.r);
+    }
+  }
+  // Earth's curve once we're high enough
+  if (alt > 20000) {
+    const e = clamp(Math.log10(alt / 20000) / Math.log10(4e8 / 20000), 0, 1);
+    const R = D.w * (6 - 5.3 * e), cx = D.x + D.w / 2, cy = D.y + D.h + R - D.h * (0.35 - 0.2 * e);
+    const eg = ctx.createRadialGradient(cx, cy, R * 0.9, cx, cy, R * 1.02);
+    eg.addColorStop(0, "#1a4a7a"); eg.addColorStop(0.97, "#3d86c6"); eg.addColorStop(1, "rgba(140,210,255,0)");
+    ctx.fillStyle = eg; ctx.beginPath(); ctx.arc(cx, cy, R * 1.02, 0, 7); ctx.fill();
+    ctx.fillStyle = "rgba(255,255,255,.18)";
+    for (let i = 0; i < 6; i++) { ctx.beginPath(); ctx.ellipse(cx + Math.cos(i * 1.7) * R * 0.5, cy - R * (0.92 + (i % 3) * 0.02), R * 0.12, R * 0.015, i, 0, 7); ctx.fill(); }
+  }
+  // NYC skyline below the horizon line
+  if (alt < 30000) {
+    const horizon = D.y + D.h * 0.42, F = D.h * 1.3;
+    const fade = clamp(1 - Math.log10(Math.max(1, alt / 600)) / 1.7, 0, 1);
+    ctx.globalAlpha = fade;
+    // ground / water haze
+    const ground = horizon + alt / 2500 * F;
+    ctx.fillStyle = "rgba(18,22,34,.92)"; ctx.fillRect(D.x, Math.min(ground, bottomY), D.w, Math.max(0, bottomY - ground));
+    for (const b of s.skyline) {
+      if (b.crown === 3 && s.tower && s.tower[0] === "Empire State Building") continue;
+      const base = horizon + alt / b.d * F, top = horizon + (alt - b.h) / b.d * F;
+      if (top > bottomY) continue;
+      const scale = F / b.d, bw = b.w * scale * 1.2, x = D.x + D.w / 2 + b.x * D.w * 1.1 - bw / 2;
+      const shade = clamp(1 - b.d / 5200, 0, 1);
+      ctx.fillStyle = mix("#3a3f57", "#0e1018", shade);
+      ctx.fillRect(x, top, bw, base - top);
+      if (b.crown === 2) { ctx.beginPath(); ctx.moveTo(x, top); ctx.lineTo(x + bw / 2, top - 60 * scale); ctx.lineTo(x + bw, top); ctx.fill(); ctx.fillRect(x + bw / 2 - 1, top - 120 * scale, 2, 60 * scale); }
+      else if (b.crown === 3) { ctx.fillRect(x + bw * 0.25, top - 25 * scale, bw * 0.5, 25 * scale); ctx.fillRect(x + bw * 0.4, top - 45 * scale, bw * 0.2, 20 * scale); ctx.fillRect(x + bw / 2 - 1, top - 62 * scale, 2, 17 * scale); }
+      else if (b.crown > 0.85) { ctx.fillRect(x + bw / 2 - 1, top - b.h * 0.12 * scale, 2, b.h * 0.12 * scale); }
+      else if (b.crown < 0.12) { ctx.fillStyle = "#2a2422"; ctx.fillRect(x + bw * 0.6, top - 9 * scale, 7 * scale, 9 * scale); }
+      // lit windows
+      if (bw > 6) {
+        ctx.fillStyle = "rgba(255,200,120,.55)";
+        let seed = b.lights;
+        for (let yy = top + 4; yy < Math.min(base, bottomY) - 2; yy += Math.max(3, 5 * scale)) for (let xx = x + 2; xx < x + bw - 2; xx += Math.max(3, 4 * scale)) { seed = (seed * 1103515245 + 12345) & 0x7fffffff; if (seed % 9 === 0) ctx.fillRect(xx, yy, 1.5, 1.5); }
+      }
+    }
+    ctx.globalAlpha = 1;
+  }
+}
+
+function drawDoors(s, D) {
+  const o = s.door, half = D.w / 2, gap = o * half;
+  for (const side of [-1, 1]) {
+    const x = side < 0 ? D.x - gap : D.x + half + gap;
+    const g = ctx.createLinearGradient(x, 0, x + half, 0);
+    g.addColorStop(0, "#5e656c"); g.addColorStop(0.5, "#858c93"); g.addColorStop(1, "#5a6067");
+    ctx.fillStyle = g; ctx.fillRect(x, D.y, half, D.h);
+    ctx.fillStyle = "rgba(255,255,255,.04)";
+    for (let yy = D.y; yy < D.y + D.h; yy += 3) ctx.fillRect(x, yy, half, 1);
+    ctx.fillStyle = "#1b1d20"; ctx.fillRect(side < 0 ? x + half - 4 : x, D.y, 4, D.h);
+  }
+}
+
+function drawCar(s, D) {
+  const { w, h } = s;
+  const light = s.flicker > 0 ? (Math.random() > 0.4 ? 1 : 0.35) : (s.ride_ && s.ride_.tier === -1 ? 0.55 : 1);
+  // walls around the door, in perspective
+  const wall = ctx.createLinearGradient(0, 0, 0, h);
+  wall.addColorStop(0, mix("#0b0c0e", "#1d2125", light * 0.9)); wall.addColorStop(1, mix("#060708", "#121417", light));
+  ctx.fillStyle = wall;
+  ctx.beginPath(); ctx.rect(0, 0, w, h); ctx.rect(D.x + D.w, D.y, -D.w, D.h); ctx.fill("evenodd");
+  // side panels: perspective lines to the corners
+  ctx.strokeStyle = "rgba(255,255,255,.05)"; ctx.lineWidth = 1;
+  const fx = D.x - 26, fy = D.y - 18, fw = D.w + 52, fh = D.h + 18;
+  ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(fx, fy); ctx.moveTo(w, 0); ctx.lineTo(fx + fw, fy); ctx.moveTo(0, h); ctx.lineTo(fx, fy + fh); ctx.moveTo(w, h); ctx.lineTo(fx + fw, fy + fh); ctx.stroke();
+  for (let i = 1; i < 4; i++) { const t = i / 4; ctx.beginPath(); ctx.moveTo(fx * t, fy * t); ctx.lineTo(fx * t, h - (h - fy - fh) * t); ctx.stroke(); ctx.beginPath(); ctx.moveTo(w - (w - fx - fw) * t, fy * t); ctx.lineTo(w - (w - fx - fw) * t, h - (h - fy - fh) * t); ctx.stroke(); }
+  // door frame
+  ctx.fillStyle = "#2b3036"; ctx.fillRect(D.x - 10, D.y - 10, D.w + 20, 10); ctx.fillRect(D.x - 10, D.y, 10, D.h); ctx.fillRect(D.x + D.w, D.y, 10, D.h);
+  ctx.fillStyle = "#4a5158"; ctx.fillRect(D.x - 10, D.y - 10, D.w + 20, 2);
+  ctx.fillStyle = "#8a8f94"; ctx.fillRect(D.x - 14, D.y + D.h, D.w + 28, 5);
+  // floor indicator above the door
+  const iw = 128, ih = 40, ix = w / 2 - iw / 2, iy = D.y - 18 - ih - 6;
+  ctx.fillStyle = "#050506"; ctx.fillRect(ix, iy, iw, ih);
+  ctx.strokeStyle = "#3a3f45"; ctx.lineWidth = 2; ctx.strokeRect(ix, iy, iw, ih);
+  const r = s.ride_;
+  let txt = "B", arrow = "";
+  if (r && r.tier >= 0 && s.alt > 0.2) {
+    const floors = s.tower[3], fh = s.tower[1] / floors;
+    txt = s.alt > s.tower[1] + 6 ? (s.alt >= 1e7 ? "∞" : s.alt >= 1000 ? `${Math.round(s.alt / 1000).toLocaleString()}KM` : `${Math.round(s.alt)}M`) : String(clamp(Math.round(s.alt / fh), 1, floors));
+    const e = s.t - r.t0; arrow = e < r.up ? "▲" : e < r.up + r.hold ? "" : "▼";
+  }
+  ctx.fillStyle = r && r.tier === -1 ? "#e5483a" : "#ffb02e"; ctx.shadowColor = ctx.fillStyle; ctx.shadowBlur = 10 * light;
+  ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.font = `26px ${getComputedStyle(document.body).getPropertyValue("--f-led")}`;
+  ctx.fillText(txt.length > 6 ? txt.slice(0, 6) : txt, w / 2 + 6, iy + ih / 2 + 1);
+  ctx.font = `14px ${getComputedStyle(document.body).getPropertyValue("--f-led")}`; ctx.fillText(arrow, ix + 14, iy + ih / 2);
+  ctx.shadowBlur = 0;
+  if (s.sign && s.t - s.sign.t0 < s.sign.dur) drawSign(s, D);
+  // ceiling light strip
+  const lg = ctx.createLinearGradient(0, 0, 0, 90);
+  lg.addColorStop(0, `rgba(220,235,255,${0.10 * light})`); lg.addColorStop(1, "rgba(220,235,255,0)");
+  ctx.fillStyle = lg; ctx.fillRect(0, 0, w, 90);
+  ctx.fillStyle = `rgba(230,240,255,${0.5 * light})`; ctx.fillRect(w * 0.3, 0, w * 0.4, 3);
+  // capacity plaque and call panel, when there's room beside the door
+  const side = D.x;
+  if (side > 120) {
+    const px = D.x - 24 - Math.min(150, side - 48), pw = Math.min(150, side - 48), py = D.y + 20;
+    ctx.fillStyle = "#3a332a"; ctx.fillRect(px, py, pw, 74);
+    ctx.strokeStyle = "#7a6a4f"; ctx.strokeRect(px + 3, py + 3, pw - 6, 68);
+    ctx.fillStyle = "#c9b48a"; ctx.textAlign = "center"; ctx.textBaseline = "top";
+    ctx.font = `800 14px ${getComputedStyle(document.body).getPropertyValue("--f-display")}`; ctx.fillText("THE LIFT CO. NEW YORK", px + pw / 2, py + 12);
+    ctx.font = `12px ${getComputedStyle(document.body).getPropertyValue("--f-led")}`; ctx.fillText("CAPACITY 8 PERSONS", px + pw / 2, py + 34); ctx.fillText("630 KG · 1,390 LB", px + pw / 2, py + 50);
+  }
+  // handrails
+  ctx.fillStyle = `rgba(160,168,176,${0.35 * light})`;
+  ctx.fillRect(0, h * 0.78, Math.max(0, D.x - 30), 5); ctx.fillRect(D.x + D.w + 30, h * 0.78, Math.max(0, w - D.x - D.w - 30), 5);
+  // dust from a hard landing
+  for (const d of s.dust) { ctx.fillStyle = `rgba(200,190,170,${d.life * 0.5})`; ctx.fillRect(D.x + d.x * D.w, D.y + d.y * D.h, 3, 3); }
+  // darkness when the lights dip
+  if (light < 1) { ctx.fillStyle = `rgba(0,0,0,${(1 - light) * 0.55})`; ctx.fillRect(0, 0, w, h); }
+  // vignette
+  const vg = ctx.createRadialGradient(w / 2, h * 0.45, Math.min(w, h) * 0.3, w / 2, h * 0.45, Math.max(w, h) * 0.8);
+  vg.addColorStop(0, "rgba(0,0,0,0)"); vg.addColorStop(1, "rgba(0,0,0,.55)");
+  ctx.fillStyle = vg; ctx.fillRect(0, 0, w, h);
+}
+
+// The electric sign over the doors: flashes on, then holds, with an LED dot grid over the letters
+function drawSign(s, D) {
+  const sg = s.sign, age = s.t - sg.t0, w = s.w;
+  const iw = Math.min(w - 24, Math.max(D.w + 40, 300)), ih = 46;
+  const ix = w / 2 - iw / 2, iy = w >= 600 ? D.y - 18 - ih - 6 : D.y + 10;
+  ctx.fillStyle = "#050506"; ctx.fillRect(ix, iy, iw, ih);
+  ctx.strokeStyle = "#3a3f45"; ctx.lineWidth = 2; ctx.strokeRect(ix, iy, iw, ih);
+  const on = age < 1.1 ? Math.floor(age * 7) % 2 === 0 : (Math.random() > 0.03);
+  if (on) {
+    const fam = getComputedStyle(document.body).getPropertyValue("--f-led");
+    let size = 26; ctx.font = `${size}px ${fam}`;
+    while (size > 11 && ctx.measureText(sg.text).width > iw - 28) { size--; ctx.font = `${size}px ${fam}`; }
+    ctx.fillStyle = sg.color; ctx.shadowColor = sg.color; ctx.shadowBlur = 16;
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText(sg.text, w / 2, iy + ih / 2 + 1);
+    ctx.shadowBlur = 0;
+    const glow = ctx.createRadialGradient(w / 2, iy + ih / 2, 10, w / 2, iy + ih / 2, iw * 0.7);
+    glow.addColorStop(0, sg.color + "33"); glow.addColorStop(1, sg.color + "00");
+    ctx.fillStyle = glow; ctx.fillRect(ix - iw * 0.2, iy - 30, iw * 1.4, ih + 60);
+  }
+  ctx.fillStyle = "rgba(5,5,6,.55)";
+  for (let x = ix + 2; x < ix + iw - 2; x += 3) ctx.fillRect(x, iy + 2, 1, ih - 4);
+  for (let y = iy + 2; y < iy + ih - 2; y += 3) ctx.fillRect(ix + 2, y, iw - 4, 1);
+}
+
+function layoutOverlay() {
+  const D = scene.D, g = $("gauge"); if (!D || !g) return;
+  const room = scene.w - (D.x + D.w) - 30;
+  g.style.left = `${D.x + D.w + 22}px`; g.style.top = `${D.y}px`; g.style.height = `${D.h}px`;
+  g.style.width = `${Math.max(40, room - 8)}px`;
+  g.classList.toggle("narrow", room < 150);
+}
+
+let last = performance.now();
+function loop(now) {
+  const dt = Math.min(0.25, (now - last) / 1000); last = now;
+  scene.step(dt, now); scene.draw();
+  requestAnimationFrame(loop);
+}
+scene.skyline = buildSkyline(); scene.stars = buildStars();
+addEventListener("resize", () => scene.resize());
+scene.resize();
+showTitle();
+if (!BANK.length) $("bank-note").textContent = "The question bank failed to load.";
+requestAnimationFrame(loop);
+})();
+</script>

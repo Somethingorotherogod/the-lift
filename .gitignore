@@ -1,0 +1,6 @@
+# local preview server config and build leftovers
+.claude/
+build.log
+__pycache__/
+.DS_Store
+bank_cache.json
